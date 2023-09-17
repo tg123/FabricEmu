@@ -11,6 +11,9 @@
 			</EntryPoint>
 		</CodePackage>
 	</DigestedCodePackage>
+	<DigestedConfigPackage RolloutVersion="1.0">
+		<ConfigPackage Name="Config" Version="1.0" />
+	</DigestedConfigPackage>
 	<DigestedResources RolloutVersion="1.0" />
 	<Diagnostics />
 </ServicePackage>

@@ -2,7 +2,7 @@ package FabricEmu
 
 import (
 	"fmt"
-	"strings"
+	"math"
 	"sync"
 
 	"github.com/tg123/phabrik/serialization"
@@ -85,7 +85,15 @@ func (r *Replica) open() error {
 					Guid: r.partitionId,
 				},
 				ConsistencyUnitDescription: ConsistencyUnitDescription{
-					PartitionKind: 1,
+					// PartitionKind: 1,
+					// Singleton = 1,
+					// Int64Range = 2,
+					// Named = 3
+					PartitionKind: 2, //
+					// LowKeyInclusive:  -9223372036854775808, // min int64
+					LowKeyInclusive: math.MinInt64,
+					// HighKeyInclusive: 9223372036854775807,
+					HighKeyInclusive: math.MaxInt64,
 				},
 				CcEpoch: Epoch{
 					ConfigurationVersion: int64(r.configurationVersion),
@@ -123,43 +131,45 @@ func (r *Replica) open() error {
 		return fmt.Errorf(reply.ProxyErrorCode.Message)
 	}
 
-	ss := strings.Split(reply.LocalReplica.ReplicationEndpoint, "/")
-	endpoint := ss[0]
+	// ss := strings.Split(reply.LocalReplica.ReplicationEndpoint, "/")
+	// log.Printf("reply %v", reply)
+	// endpoint := ss[0]
+	// log.Printf("replica open endpoint %v", endpoint)
 
-	// this is an unsecure client
-	rapClient, err := transport.DialTCP(endpoint, transport.ClientConfig{
-		// MessageCallback: func(c transport.Conn, bam *transport.ByteArrayMessage) {
-		// },
-	})
-	if err != nil {
-		return err
-	}
+	// // this is an unsecure client
+	// rapClient, err := transport.DialTCP(endpoint, transport.ClientConfig{
+	// 	// MessageCallback: func(c transport.Conn, bam *transport.ByteArrayMessage) {
+	// 	// },
+	// })
+	// if err != nil {
+	// 	return err
+	// }
 
-	r.rapClient = rapClient
+	// r.rapClient = rapClient
 
-	if len(ss) < 2 {
-		return fmt.Errorf("bad replica endpoint string %v", reply.LocalReplica.ReplicationEndpoint)
-	}
+	// if len(ss) < 2 {
+	// 	return fmt.Errorf("bad replica endpoint string %v", reply.LocalReplica.ReplicationEndpoint)
+	// }
 
-	ss = strings.Split(ss[1], ";")
-	if len(ss) < 2 {
-		return fmt.Errorf("bad replica ids in endpoint string %v", reply.LocalReplica.ReplicationEndpoint)
-	}
+	// ss = strings.Split(ss[1], ";")
+	// if len(ss) < 2 {
+	// 	return fmt.Errorf("bad replica ids in endpoint string %v", reply.LocalReplica.ReplicationEndpoint)
+	// }
 
-	incarnationId, err := serialization.GUIDFromString(ss[1])
-	if err != nil {
-		return err
-	}
+	// incarnationId, err := serialization.GUIDFromString(ss[1])
+	// if err != nil {
+	// 	return err
+	// }
 
-	r.incarnationId = incarnationId
+	// r.incarnationId = incarnationId
 
-	if err := r.startCopy(); err != nil {
-		return err
-	}
+	// if err := r.startCopy(); err != nil {
+	// 	return err
+	// }
 
-	if err := r.copy(); err != nil {
-		return err
-	}
+	// if err := r.copy(); err != nil {
+	// 	return err
+	// }
 
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -15,7 +16,7 @@ import (
 	"text/template"
 )
 
-//go:embed servicepkgtmpl/*.tpl
+//go:embed all:servicepkgtmpl
 var tmpls embed.FS // this folder contains very basic files to run sf app
 
 type serviceManifest struct {
@@ -56,32 +57,50 @@ func loadServiceManifest(servicePkgPath string) (*serviceManifest, error) {
 	return &manifestxml, nil
 }
 
-func (h *ReplicaAgent) buildRuntimeFolder(manifestxml *serviceManifest) error {
-
-	appname := "Dummy" // TODO dup code
-	appid := fmt.Sprintf("%v_App0", appname)
-	if err := os.MkdirAll(filepath.Join(h.deploymentDirectory, appid), 0755); err != nil {
-		return err
-	}
-
-	files, err := tmpls.ReadDir("servicepkgtmpl")
+func (h *ReplicaAgent) buildRuntimeFolderTpl(basedir, subdir string, manifestxml *serviceManifest) error {
+	files, err := tmpls.ReadDir(path.Join("servicepkgtmpl", subdir))
 	if err != nil {
 		return err
 	}
 
 	for _, f := range files {
-		tf, err := os.Create(filepath.Join(h.deploymentDirectory, appid, strings.TrimSuffix(f.Name(), ".tpl")))
+
+		if f.IsDir() {
+			if err := os.MkdirAll(filepath.Join(basedir, subdir, f.Name()), 0755); err != nil {
+				return err
+			}
+
+			if err := h.buildRuntimeFolderTpl(basedir, path.Join(subdir, f.Name()), manifestxml); err != nil {
+				return err
+			}
+
+			continue
+		}
+
+		tf, err := os.Create(filepath.Join(basedir, subdir, strings.TrimSuffix(f.Name(), ".tpl")))
 		if err != nil {
 			return err
 		}
 
-		t, err := template.ParseFS(tmpls, path.Join("servicepkgtmpl", f.Name()))
-		if err != nil {
-			return err
-		}
+		if strings.HasSuffix(f.Name(), ".tpl") {
+			t, err := template.ParseFS(tmpls, path.Join("servicepkgtmpl", subdir, f.Name()))
+			if err != nil {
+				return err
+			}
 
-		if err := t.Execute(tf, manifestxml); err != nil {
-			return nil
+			if err := t.Execute(tf, manifestxml); err != nil {
+				return nil
+			}
+		} else {
+
+			b, err := tmpls.ReadFile(path.Join("servicepkgtmpl", subdir, f.Name()))
+			if err != nil {
+				return err
+			}
+
+			if _, err := tf.Write(b); err != nil {
+				return err
+			}
 		}
 
 		tf.Close()
@@ -90,14 +109,95 @@ func (h *ReplicaAgent) buildRuntimeFolder(manifestxml *serviceManifest) error {
 	return nil
 }
 
-func (h *ReplicaAgent) ExecServicePkg(servicePkgPath string) (*exec.Cmd, error) {
+func (h *ReplicaAgent) buildRuntimeFolder(manifestxml *serviceManifest, configDir string) error {
+
+	appname := "Dummy" // TODO dup code
+	appid := fmt.Sprintf("%v_App0", appname)
+	basedir := filepath.Join(h.deploymentDirectory, appid)
+	if err := os.MkdirAll(basedir, 0755); err != nil {
+		return err
+	}
+
+	// files, err := tmpls.ReadDir("servicepkgtmpl")
+	// if err != nil {
+	// 	return err
+	// }
+
+	if err := h.buildRuntimeFolderTpl(basedir, "", manifestxml); err != nil {
+		return err
+	}
+
+	if err := copyDir(configDir, filepath.Join(basedir, "ServicePkg.Config.1.0")); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// chatgpt
+func copyDir(sourceDir, destinationDir string) error {
+	// Create the destination directory if it doesn't exist
+	if err := os.MkdirAll(destinationDir, 0755); err != nil {
+		return err
+	}
+
+	// Open the source directory
+	sourceInfo, err := os.Stat(sourceDir)
+	if err != nil {
+		return err
+	}
+
+	if !sourceInfo.IsDir() {
+		return fmt.Errorf("%s is not a directory", sourceDir)
+	}
+
+	// Read the contents of the source directory
+	fileList, err := os.ReadDir(sourceDir)
+	if err != nil {
+		return err
+	}
+
+	// Copy each file and subdirectory from the source to the destination
+	for _, file := range fileList {
+		sourcePath := filepath.Join(sourceDir, file.Name())
+		destinationPath := filepath.Join(destinationDir, file.Name())
+
+		if file.IsDir() {
+			// Recursively copy subdirectories
+			if err := copyDir(sourcePath, destinationPath); err != nil {
+				return err
+			}
+		} else {
+			// Copy files
+			sourceFile, err := os.Open(sourcePath)
+			if err != nil {
+				return err
+			}
+			defer sourceFile.Close()
+
+			destinationFile, err := os.Create(destinationPath)
+			if err != nil {
+				return err
+			}
+			defer destinationFile.Close()
+
+			_, err = io.Copy(destinationFile, sourceFile)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (h *ReplicaAgent) ExecServicePkg(servicePkgPath, exePath, sfPath, configDir string) (*exec.Cmd, error) {
 
 	manifestxml, err := loadServiceManifest(servicePkgPath)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := h.buildRuntimeFolder(manifestxml); err != nil {
+	if err := h.buildRuntimeFolder(manifestxml, configDir); err != nil {
 		return nil, err
 	}
 
@@ -117,8 +217,10 @@ func (h *ReplicaAgent) ExecServicePkg(servicePkgPath string) (*exec.Cmd, error) 
 	}
 
 	// code here in sf means bin
+	// codedir := filepath.Join(servicePkgPath, manifestxml.CodePackage.Name)
 	codedir := filepath.Join(servicePkgPath, manifestxml.CodePackage.Name)
-	cmd := exec.Command(manifestxml.CodePackage.EntryPoint.ExeHost.Program, manifestxml.CodePackage.EntryPoint.ExeHost.Arguments)
+	// cmd := exec.Command(manifestxml.CodePackage.EntryPoint.ExeHost.Program, manifestxml.CodePackage.EntryPoint.ExeHost.Arguments)
+	cmd := exec.Command(exePath, manifestxml.CodePackage.EntryPoint.ExeHost.Arguments)
 
 	switch manifestxml.CodePackage.EntryPoint.ExeHost.WorkingFolder {
 	case "", "CodeBase":
@@ -129,8 +231,18 @@ func (h *ReplicaAgent) ExecServicePkg(servicePkgPath string) (*exec.Cmd, error) 
 		cmd.Dir = manifestxml.CodePackage.EntryPoint.ExeHost.WorkingFolder
 	}
 
+	// temp workaround
+	cmd.Dir = path.Dir(exePath)
+
+	envvar := os.Environ()
+	for i, v := range envvar {
+		if strings.HasPrefix(v, "Path=") {
+			envvar[i] = fmt.Sprintf("Path=%v;%v", sfPath, v[5:])
+		}
+	}
+
 	cmd.Env = append(
-		os.Environ(),
+		envvar,
 
 		fmt.Sprintf("FabricLogRoot=%v", logdir),
 		fmt.Sprintf("Fabric_ApplicationHostId=%v", h.hostid),
