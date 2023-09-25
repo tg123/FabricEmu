@@ -241,8 +241,18 @@ func (h *ReplicaAgent) ExecServicePkg(servicePkgPath, exePath, sfPath, configDir
 		}
 	}
 
+
+
 	cmd.Env = append(
 		envvar,
+
+		"AISC_METRIC_DEFAULT_DIMENSION_Region=westus2",
+        "AISC_METRIC_DEFAULT_DIMENSION_Environment=test",
+        "AISC_METRIC_DEFAULT_DIMENSION_ClusterName=Local",
+        "AISC_LOG_NAMESPACE_CUST_WINDOWS=AISCCustTestWindows",
+        "AISC_LOG_NAMESPACE_CUST_LINUX=AISCCustTestLinux",
+        "ASPNETCORE_ENVIRONMENT=Development.Test",
+        "DOTNET_ENVIRONMENT=Development.Test",
 
 		fmt.Sprintf("FabricLogRoot=%v", logdir),
 		fmt.Sprintf("Fabric_ApplicationHostId=%v", h.hostid),

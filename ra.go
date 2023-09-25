@@ -28,11 +28,13 @@ type ReplicaAgent struct {
 
 	replicas sync.Map
 
+	stateful           bool
 	onNewReplicaOpened func(replica *Replica)
 }
 
 type ReplicaAgentConfig struct {
 	OnNewReplicaOpened func(replica *Replica)
+	Stateful           bool
 }
 
 func NewReplicaAgent(config ReplicaAgentConfig) (*ReplicaAgent, error) {
@@ -53,6 +55,7 @@ func NewReplicaAgent(config ReplicaAgentConfig) (*ReplicaAgent, error) {
 	}
 
 	ra.deploymentDirectory = dir
+	ra.stateful = config.Stateful
 
 	return ra, nil
 }

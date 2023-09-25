@@ -29,6 +29,7 @@ type Replica struct {
 	partitionId          serialization.GUID
 	configurationVersion int
 	replicaOpen          chan *ProxyReplyMessageBody
+	stateful             bool
 }
 
 func (h *ReplicaAgent) newReplica(c transport.Conn, req RegisterServiceTypeRequest) (*Replica, error) {
@@ -52,6 +53,7 @@ func (h *ReplicaAgent) newReplica(c transport.Conn, req RegisterServiceTypeReque
 		partitionId:          failoverId,
 		replicaOpen:          make(chan *ProxyReplyMessageBody),
 		configurationVersion: 1,
+		stateful:             h.stateful,
 	}
 
 	h.replicas.Store(failoverId, r)
@@ -105,8 +107,8 @@ func (r *Replica) open() error {
 				},
 			},
 			Service: ServiceDescription{
-				Name:       r.serviceName,
-				IsStateful: true,
+				Name: r.serviceName,
+				IsStateful: r.stateful,
 				Type: ServiceTypeIdentifier{
 					PackageIdentifier: ServicePackageIdentifier{
 						ApplicationIdentifier: ApplicationIdentifier{

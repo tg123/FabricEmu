@@ -1,1 +1,1 @@
-DummyEndpoint;tcp;Internal;0;;;;;127.0.0.1
+public_management;https;Input;443;;;;;127.0.0.1
